@@ -1,23 +1,60 @@
 #!/bin/bash
 # Make sure all our local dependencies are available.
 
+function set_os_specific {
+  # RedHat
+  which yum && { 
+    PKG_MANAGER='yum'
+    PKG_INSTALL="$PKG_MANAGER install -y"
+    PKG_QUERY="$PKG_MANAGER list installed"
+    PKG_QUERY_INSTALLED="$PKG_QUERY"
+    PKG_UPDATE="$PKG_MANAGER update -y"
+    PKG_LIST="gcc git libxml2 libxml2-devel libxslt libxslt-devel ruby ruby-devel rubygem-nokogiri"
+    # TODO: Find a better way to get nokogiri installed?
+    export NOKOGIRI_USE_SYSTEM_LIBRARIES=1
+    return
+  }
+  # TODO: Add support for zypper
+  which zypper && {
+    PKG_MANAGER='zypper'
+    return
+  }
+  which apt-get && {
+    PKG_MANAGER='apt-get'
+    PKG_INSTALL="$PKG_MANAGER install -y"
+    PKG_QUERY="dpkg-query"
+    PKG_QUERY_INSTALLED="$PKG_QUERY -W --showformat='${Status}\n'"
+    PKG_UPDATE="$PKG_MANAGER update -y"
+    PKG_LIST="git-core ruby-dev"
+    return
+  }
+  # TODO: Add support for homebrew?
+  which homebrew && {
+    echo "Doing nothing - homebrew"
+    return
+  }
+  echo "Couldn't find package manager"
+  exit
+}
+
 OS_TYPE="$(uname -s)"
+set_os_specific
 set -e
 
 # On Linux, 
 # install absolutely necessary Boxen dependencies (git and ruby)
 if [[ "$OS_TYPE" =~ 'Linux' ]]; then
   PKGS=""
-  for PKG in ruby-dev git-core
+  for PKG in $PKG_LIST
   do
-    PKGS+=$([[ "" == $(dpkg-query -W --showformat='${Status}\n' $PKG 2>&1 |grep "install ok installed") ]] && echo "$PKG " || echo "")
+    PKGS+=$([[ "" == $($PKG_QUERY_INSTALLED $PKG 2>&1 |grep "install ok installed") ]] && echo "$PKG " || echo "")
   done
   if [[ "$PKGS" != "" ]]; then
     /usr/bin/sudo -E -p "Need to install absolutely necessary Boxen dependencies ($PKGS), password for sudo: " \
-    /usr/bin/apt-get -y update
+    $PKG_UPDATE
     # probably don't need the second prompt, but what the hell
     /usr/bin/sudo -E -p "Need to install absolutely necessary Boxen dependencies ($PKGS), password for sudo: " \
-    /usr/bin/apt-get -y install $PKGS
+    $PKG_INSTALL $PKGS
   fi
 fi
 
@@ -62,7 +99,7 @@ fi
 
 # Fix the binstubs to use system ruby
 if [ -e /usr/bin/sed ]; then
-  find bin -not -path 'bin/\.*' -type f -print0 | xargs -0 /usr/bin/sed -i '' 's|/usr/bin/env ruby|/usr/bin/ruby|g'
+  find bin -not -path 'bin/\.*' -type f -print0 | xargs -0 /usr/bin/sed -i 's|/usr/bin/env ruby|/usr/bin/ruby|g'
 else
   find bin -not -path 'bin/\.*' -type f -print0 | xargs -0 -I % /bin/sed -i 's|/usr/bin/env ruby|/usr/bin/ruby|g' %
 fi
