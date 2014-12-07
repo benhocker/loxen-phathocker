@@ -6,10 +6,11 @@ function set_os_specific {
   which yum && { 
     PKG_MANAGER='yum'
     PKG_INSTALL="$PKG_MANAGER install -y"
-    PKG_QUERY="$PKG_MANAGER list installed"
-    PKG_QUERY_INSTALLED="$PKG_QUERY"
+    PKG_QUERY="rpm -qa"
+    PKG_QUERY_INSTALLED="$PKG_QUERY | grep "
+    PKG_QUERY_VERIFY="wc -l"
     PKG_UPDATE="$PKG_MANAGER update -y"
-    PKG_LIST="gcc git libxml2 libxml2-devel libxslt libxslt-devel ruby ruby-devel rubygem-nokogiri"
+    PKG_LIST="gcc git gnome-keyring libxml2 libxml2-devel libxslt libxslt-devel ruby ruby-devel rubygem-nokogiri"
     # TODO: Find a better way to get nokogiri installed?
     export NOKOGIRI_USE_SYSTEM_LIBRARIES=1
     return
@@ -19,11 +20,17 @@ function set_os_specific {
     PKG_MANAGER='zypper'
     return
   }
+  # TODO: Add support for pacman
+  which pacman && {
+    PKG_MANAGER='pacman'
+    return
+  }
   which apt-get && {
     PKG_MANAGER='apt-get'
     PKG_INSTALL="$PKG_MANAGER install -y"
     PKG_QUERY="dpkg-query"
     PKG_QUERY_INSTALLED="$PKG_QUERY -W --showformat='${Status}\n'"
+    PKG_QUERY_VERIFY="grep 'install ok installed'"
     PKG_UPDATE="$PKG_MANAGER update -y"
     PKG_LIST="git-core ruby-dev"
     return
@@ -47,7 +54,7 @@ if [[ "$OS_TYPE" =~ 'Linux' ]]; then
   PKGS=""
   for PKG in $PKG_LIST
   do
-    PKGS+=$([[ "" == $($PKG_QUERY_INSTALLED $PKG 2>&1 |grep "install ok installed") ]] && echo "$PKG " || echo "")
+    PKGS+=$([[ "" == $($PKG_QUERY_INSTALLED $PKG | $PKG_QUERY_VERIFY) ]] && echo "$PKG " || echo "")
   done
   if [[ "$PKGS" != "" ]]; then
     /usr/bin/sudo -E -p "Need to install absolutely necessary Boxen dependencies ($PKGS), password for sudo: " \
